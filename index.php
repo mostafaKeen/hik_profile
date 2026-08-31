@@ -11,7 +11,7 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     }
 }
 
-$userId = $placementOptions['USER_ID'] ?? null;
+$userId = $_REQUEST['params']['USER_ID'] ?? ($placementOptions['USER_ID'] ?? null);
 
 // Fallback to active viewer if opened directly or outside employee card placement
 if (!$userId) {
