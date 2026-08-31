@@ -89,11 +89,11 @@
         ];
         CRest::setSettingData($settings);
 
-        // Dynamically build the absolute URL to index.php
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
         $host = $_SERVER['HTTP_HOST'];
-        $uri = preg_replace('/install\.php$/i', 'index.php', $_SERVER['REQUEST_URI']);
-        $handlerUrl = $protocol . $host . $uri;
+        $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        $cleanPath = preg_replace('/install\.php$/i', 'index.php', $path);
+        $handlerUrl = $protocol . $host . $cleanPath;
 
         // Perform clean registration: call placement.unbind, then placement.bind
         // We use CRestCurrent to invoke binding/unbinding on behalf of the installing admin
