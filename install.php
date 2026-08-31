@@ -1,9 +1,20 @@
 <?php
 require_once(__DIR__ . '/crest.php');
 
-// If this is a placement load (not installation), execute index.php instead
+// Parse user ID from request parameters
+$userId = $_REQUEST['params']['USER_ID'] ?? null;
+if (!$userId && !empty($_REQUEST['PLACEMENT_OPTIONS'])) {
+    $options = is_array($_REQUEST['PLACEMENT_OPTIONS']) 
+        ? $_REQUEST['PLACEMENT_OPTIONS'] 
+        : (json_decode($_REQUEST['PLACEMENT_OPTIONS'], true) ?: []);
+    $userId = $options['USER_ID'] ?? null;
+}
+
+$event = $_REQUEST['event'] ?? '';
 $placement = $_REQUEST['PLACEMENT'] ?? '';
-if (!empty($placement) && $placement !== 'ONAPPINSTALL') {
+
+// If a user ID is specified or this is a placement load (not installation event), execute index.php
+if (!empty($userId) || ($event !== 'ONAPPINSTALL' && $placement !== 'ONAPPINSTALL' && (!empty($placement) || !empty($event)))) {
     include(__DIR__ . '/index.php');
     exit;
 }
