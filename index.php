@@ -173,10 +173,56 @@ $firstCheckIn = null;
 $lastCheckIn = null;
 $lastKnownEvent = null;
 
+function parseLogDateAndTime($record) {
+    $timeRaw = $record['event_time'] ?? $record['recorded_at'] ?? '';
+    $dateRaw = $record['event_date'] ?? '';
+
+    $parsedTime = strtotime($timeRaw);
+    if ($parsedTime !== false && $parsedTime > 0) {
+        $date = date('Y-m-d', $parsedTime);
+        $time = date('H:i:s', $parsedTime);
+    } else {
+        $date = !empty($dateRaw) ? $dateRaw : '0000-00-00';
+        $time = '00:00:00';
+    }
+    return [$date, $time];
+}
+
+// Generate list of all dates in the range (from $startDate to $endDate)
+$dailyAttendance = [];
+try {
+    $startPeriod = new DateTime($startDate);
+    $endPeriod = new DateTime($endDate);
+    $endPeriod->modify('+1 day'); // inclusive
+
+    $interval = new DateInterval('P1D');
+    $dateRangePeriod = new DatePeriod($startPeriod, $interval, $endPeriod);
+
+    foreach ($dateRangePeriod as $dateObj) {
+        $dateStr = $dateObj->format('Y-m-d');
+        $dailyAttendance[$dateStr] = [
+            'date' => $dateStr,
+            'day_name' => $dateObj->format('l'),
+            'attended' => false,
+            'check_in' => null,
+            'reader_id' => null
+        ];
+    }
+} catch (Exception $e) {
+    // Fallback if DatePeriod fails
+    $dailyAttendance[$startDate] = [
+        'date' => $startDate,
+        'day_name' => date('l', strtotime($startDate)),
+        'attended' => false,
+        'check_in' => null,
+        'reader_id' => null
+    ];
+}
+
 if ($matchedEmployee) {
     foreach ($hikLogs as $record) {
         if (($record['employee_id'] ?? null) == $matchedEmployee['id']) {
-            $recordDate = !empty($record['event_date']) ? $record['event_date'] : date('Y-m-d', strtotime($record['event_time']));
+            list($recordDate, $recordTime) = parseLogDateAndTime($record);
             
             // Check check-in within selected date range
             if ($recordDate >= $startDate && $recordDate <= $endDate) {
@@ -186,12 +232,21 @@ if ($matchedEmployee) {
                 
                 if ($isAuth) {
                     $hasAuthEvent = true;
-                    $timeStr = date('H:i:s', strtotime($record['event_time']));
-                    if ($firstCheckIn === null || $timeStr < $firstCheckIn) {
-                        $firstCheckIn = $timeStr;
+                    if ($firstCheckIn === null || $recordTime < $firstCheckIn) {
+                        $firstCheckIn = $recordTime;
                     }
-                    if ($lastCheckIn === null || $timeStr > $lastCheckIn) {
-                        $lastCheckIn = $timeStr;
+                    if ($lastCheckIn === null || $recordTime > $lastCheckIn) {
+                        $lastCheckIn = $recordTime;
+                    }
+                    
+                    // Mark as attended in the daily summary
+                    if (isset($dailyAttendance[$recordDate])) {
+                        $dailyAttendance[$recordDate]['attended'] = true;
+                        $formattedCheckIn = date('h:i:s A', strtotime($recordDate . ' ' . $recordTime));
+                        if ($dailyAttendance[$recordDate]['check_in'] === null || $formattedCheckIn < $dailyAttendance[$recordDate]['check_in']) {
+                            $dailyAttendance[$recordDate]['check_in'] = $formattedCheckIn;
+                        }
+                        $dailyAttendance[$recordDate]['reader_id'] = $record['card_reader_id'] ?? 'N/A';
                     }
                 }
             }
@@ -200,7 +255,7 @@ if ($matchedEmployee) {
             $isAuth = (strcasecmp($record['event_type'] ?? '', 'Authenticated') === 0) || 
                       (strcasecmp($record['status_badge'] ?? '', 'authenticated') === 0);
             if ($isAuth) {
-                if ($lastKnownEvent === null || $record['event_time'] > $lastKnownEvent['event_time']) {
+                if ($lastKnownEvent === null || ($record['event_time'] ?? '') > ($lastKnownEvent['event_time'] ?? '')) {
                     $lastKnownEvent = $record;
                 }
             }
@@ -208,8 +263,11 @@ if ($matchedEmployee) {
     }
     // Sort events by time descending
     usort($employeeEvents, function($a, $b) {
-        return strcmp($b['event_time'], $a['event_time']);
+        return strcmp($b['event_time'] ?? '', $a['event_time'] ?? '');
     });
+    
+    // Sort daily attendance dates descending (latest day on top)
+    krsort($dailyAttendance);
 }
 
 // 7. Count CRM entities assigned to user in date range
@@ -444,36 +502,38 @@ $spaCount = getSpa1088Count($userId, $startDate, $endDate);
                 </div>
             </div>
 
-            <!-- Recent Hikvision Event Logs (List) -->
+            <!-- Daily Attendance Summary (List) -->
             <div class="glass-card logs-section" style="margin-bottom: 0;">
-                <h3><i class="fa-solid fa-timeline"></i> Recent Access Logs (Selected Range)</h3>
-                <?php if (empty($employeeEvents)): ?>
+                <h3><i class="fa-solid fa-calendar-days"></i> Daily Attendance Summary (Selected Range)</h3>
+                <?php if (empty($dailyAttendance)): ?>
                     <p style="color: var(--text-muted); font-size: 13px; text-align: center; margin: 20px 0;">
-                        No logs registered in this date range.
+                        No dates found in range.
                     </p>
                 <?php else: ?>
-                    <?php 
-                    // Show maximum 5 recent events in list
-                    $displayCount = 0;
-                    foreach ($employeeEvents as $event): 
-                        if ($displayCount >= 5) break;
-                        $displayCount++;
-                        $isAuth = (strcasecmp($event['event_type'] ?? '', 'Authenticated') === 0) || 
-                                  (strcasecmp($event['status_badge'] ?? '', 'authenticated') === 0);
-                    ?>
-                        <div class="log-item" style="<?php echo $isAuth ? 'border-left: 3px solid var(--status-attended);' : ''; ?>">
+                    <?php foreach ($dailyAttendance as $day): ?>
+                        <div class="log-item" style="<?php echo $day['attended'] ? 'border-left: 4px solid var(--status-attended);' : 'border-left: 4px solid var(--status-absent);'; ?>">
                             <div class="log-meta">
                                 <span class="log-title">
-                                    <?php echo htmlspecialchars($event['event_type'] ?? 'Access Event'); ?> 
-                                    <?php if ($isAuth): ?>
-                                        <span style="color: #34d399; font-size: 11px; margin-left: 6px;"><i class="fa-solid fa-circle-check"></i> Authenticated</span>
+                                    <strong><?php echo htmlspecialchars($day['date']); ?></strong> 
+                                    <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px;">
+                                        (<?php echo $day['day_name']; ?>)
+                                    </span>
+                                </span>
+                                <span class="log-reader">
+                                    <?php if ($day['attended']): ?>
+                                        <i class="fa-solid fa-fingerprint"></i> Reader ID: <?php echo htmlspecialchars($day['reader_id'] ?? 'N/A'); ?>
+                                    <?php else: ?>
+                                        <i class="fa-solid fa-circle-xmark" style="color: var(--status-absent);"></i> No check-in recorded
                                     <?php endif; ?>
                                 </span>
-                                <span class="log-reader"><i class="fa-solid fa-fingerprint"></i> Reader ID: <?php echo htmlspecialchars($event['card_reader_id'] ?? 'N/A'); ?></span>
                             </div>
                             <div class="log-time">
-                                <div><?php echo date('Y-m-d', strtotime($event['event_time'])); ?></div>
-                                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;"><?php echo date('h:i:s A', strtotime($event['event_time'])); ?></div>
+                                <?php if ($day['attended']): ?>
+                                    <span style="color: #34d399; font-weight: 600;"><i class="fa-solid fa-circle-check"></i> Attended</span>
+                                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Check-In: <?php echo $day['check_in']; ?></div>
+                                <?php else: ?>
+                                    <span style="color: #fb7185; font-weight: 600;"><i class="fa-solid fa-user-slash"></i> Absent</span>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>
