@@ -1,3 +1,13 @@
+<?php
+require_once(__DIR__ . '/crest.php');
+
+// If this is a placement load (not installation), execute index.php instead
+$placement = $_REQUEST['PLACEMENT'] ?? '';
+if (!empty($placement) && $placement !== 'ONAPPINSTALL') {
+    include(__DIR__ . '/index.php');
+    exit;
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,7 +75,6 @@
 <body>
     <div class="card">
         <?php
-        require_once(__DIR__ . '/crest.php');
 
         // Check if installer is called from Bitrix24
         $authId = $_REQUEST['AUTH_ID'] ?? '';
