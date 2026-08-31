@@ -1,0 +1,6 @@
+# Ignore application credentials and configuration
+settings.php
+
+# Ignore local token storage and cache files
+settings.json
+hikvision_cache.json
