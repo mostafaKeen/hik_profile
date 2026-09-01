@@ -495,9 +495,9 @@ $spaCount = getSpa1088Count($userId, $startDate, $endDate);
                     <div class="metric-title"><i class="fa-solid fa-handshake"></i> Deals</div>
                     <div class="metric-value"><?php echo $dealsCount; ?></div>
                 </div>
-                <!-- SPA 1088 Card -->
+                <!-- Bookings Card -->
                 <div class="metric-card">
-                    <div class="metric-title"><i class="fa-solid fa-briefcase"></i> SPA 1088</div>
+                    <div class="metric-title"><i class="fa-solid fa-calendar-check"></i> Bookings</div>
                     <div class="metric-value"><?php echo $spaCount; ?></div>
                 </div>
             </div>
